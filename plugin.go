@@ -75,9 +75,10 @@ func (m MixpanelProxy) MassageRequestBody(r *http.Request) error {
 // UnmarshalCaddyfile - this is a no-op
 func (m *MixpanelProxy) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	arg1 := d.NextArg()
+	arg2 := d.NextArg()
 
 	// Parse standalone length
-	if arg1 {
+	if arg1 && arg2 {
 		val := d.Val()
 		m.MixpanelKey = val
 
