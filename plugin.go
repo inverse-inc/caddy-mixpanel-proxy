@@ -1,13 +1,21 @@
 package mixpanelproxy
 
 import (
+	"bytes"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"github.com/tidwall/sjson"
 )
+
+var keysToClear = []string{"$referrer", "$referring_domain", "$current_url"}
+
+const clearedValue = "CLEARED_BY_MIXPANEL_PROXY"
 
 func init() {
 	caddy.RegisterModule(MixpanelProxy{})
@@ -36,6 +44,31 @@ func (m *MixpanelProxy) Provision(ctx caddy.Context) error {
 func (m MixpanelProxy) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
 
 	return next.ServeHTTP(w, r)
+}
+
+func (m MixpanelProxy) MassageRequestBody(r *http.Request) error {
+	defer r.Body.Close()
+
+	data, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return fmt.Errorf("mixpanel_proxy: Unable to read body: %s", err)
+	}
+
+	data, err = sjson.SetBytes(data, "#.properties.token", m.MixpanelKey)
+	if err != nil {
+		return fmt.Errorf("mixpanel_proxy: Unable to set token value: %s", err)
+	}
+
+	for _, toClear := range keysToClear {
+		data, err = sjson.SetBytes(data, "#.properties."+toClear, clearedValue)
+		if err != nil {
+			return fmt.Errorf("mixpanel_proxy: Unable to set clear %s key: %s", toClear, err)
+		}
+	}
+
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(data))
+
+	return nil
 }
 
 // UnmarshalCaddyfile - this is a no-op
