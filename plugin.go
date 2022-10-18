@@ -29,14 +29,6 @@ func (MixpanelProxy) CaddyModule() caddy.ModuleInfo {
 
 // Provision implements caddy.Provisioner.
 func (m *MixpanelProxy) Provision(ctx caddy.Context) error {
-	if m.Length < 1 {
-		m.Length = 21
-	}
-
-	if m.Additional == nil {
-		m.Additional = make(map[string]int)
-	}
-
 	return nil
 }
 
