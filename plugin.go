@@ -42,6 +42,7 @@ func (m *MixpanelProxy) Provision(ctx caddy.Context) error {
 
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (m MixpanelProxy) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
+	m.MassageRequestBody(r)
 
 	return next.ServeHTTP(w, r)
 }
