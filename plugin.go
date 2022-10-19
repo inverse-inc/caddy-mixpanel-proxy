@@ -16,7 +16,13 @@ import (
 	"github.com/tidwall/sjson"
 )
 
-var keysToClear = []string{"$referrer", "$referring_domain", "$current_url"}
+var keysToClear = map[string]string{
+	"$referrer":                 "https://example.com",
+	"$referring_domain":         "example.com",
+	"$current_url":              "https://example.com:1443/admin#/status/dashboard",
+	"$initial_referrer":         "https://example.com:1443/admin",
+	"$initial_referring_domain": "example.com",
+}
 
 const clearedValue = "CLEARED_BY_MIXPANEL_PROXY"
 
@@ -79,19 +85,19 @@ func (m MixpanelProxy) MassageRequestBody(r *http.Request) error {
 		return fmt.Errorf("mixpanel_proxy: Unable to set token value: %s", err)
 	}
 
-	//for _, toClear := range keysToClear {
-	//	data, err = sjson.Set(data, "#.properties."+toClear, clearedValue)
-	//	if err != nil {
-	//		return fmt.Errorf("mixpanel_proxy: Unable to set clear %s key: %s", toClear, err)
-	//	}
-	//}
+	for toClear, v := range keysToClear {
+		data, err = sjson.Set(data, "#.properties."+toClear, v)
+		if err != nil {
+			return fmt.Errorf("mixpanel_proxy: Unable to set clear %s key: %s", toClear, err)
+		}
+	}
 
 	newBody := "data=" + url.QueryEscape(data)
 	newBody = strings.Replace(newBody, "+", "%20", -1)
-	fmt.Println(string(bodyRaw))
-	fmt.Println(string(newBody))
-	r.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(newBody)))
-	r.Header.Set("Content-Length", strconv.Itoa(len(newBody)))
+	newBodyBytes := []byte(newBody)
+	r.Header.Set("Content-Length", strconv.Itoa(len(newBodyBytes)))
+	r.ContentLength = int64(len(newBodyBytes))
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(newBodyBytes))
 
 	return nil
 }
