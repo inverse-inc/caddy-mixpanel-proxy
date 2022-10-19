@@ -2,8 +2,9 @@ package mixpanelproxy
 
 import (
 	"bytes"
-	"io/ioutil"
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/inverse-inc/go-utils/sharedutils"
@@ -135,16 +136,18 @@ func TestValidMassageRequest(t *testing.T) {
 	}
 }]`)
 
-	req, err := http.NewRequest("POST", "https://analytics.packetfence.org/track/?verbose=1&ip=0&_=1665604206698", bytes.NewBuffer(b))
+	req, err := http.NewRequest("POST", "https://analytics.packetfence.org/track/?verbose=1&ip=0&_=1665604206698", strings.NewReader(url.Values{"data": []string{string(b)}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	sharedutils.CheckError(err)
 
 	err = p.MassageRequestBody(req)
 	sharedutils.CheckError(err)
 
-	newBody, err := ioutil.ReadAll(req.Body)
-	sharedutils.CheckError(err)
+	req.PostForm = nil
+	req.ParseForm()
+	newBody := req.PostFormValue("data")
 
-	tokens := gjson.GetBytes(newBody, "#.properties.token").Array()
+	tokens := gjson.Get(newBody, "#.properties.token").Array()
 	if len(tokens) != eventsCount {
 		t.Error("Invalid amount of tokens retrieved from the payload")
 	}
@@ -156,7 +159,7 @@ func TestValidMassageRequest(t *testing.T) {
 	}
 
 	for _, toClear := range keysToClear {
-		data := gjson.GetBytes(newBody, "#.properties."+toClear).Array()
+		data := gjson.Get(newBody, "#.properties."+toClear).Array()
 		if len(data) != eventsCount {
 			t.Error("Invalid amount of tokens retrieved from the payload")
 		}
@@ -167,7 +170,6 @@ func TestValidMassageRequest(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func TestInvalidMassageRequest(t *testing.T) {
@@ -175,44 +177,60 @@ func TestInvalidMassageRequest(t *testing.T) {
 	p := MixpanelProxy{MixpanelKey: k}
 
 	b := []byte(`[{}]`)
-	req, err := http.NewRequest("POST", "https://analytics.packetfence.org/track/?verbose=1&ip=0&_=1665604206698", bytes.NewBuffer(b))
+	req, err := http.NewRequest("POST", "https://analytics.packetfence.org/track/?verbose=1&ip=0&_=1665604206698", strings.NewReader(url.Values{"data": []string{string(b)}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	sharedutils.CheckError(err)
 
 	err = p.MassageRequestBody(req)
 	sharedutils.CheckError(err)
 
-	newBody, err := ioutil.ReadAll(req.Body)
-	sharedutils.CheckError(err)
+	req.PostForm = nil
+	req.ParseForm()
+	newBody := req.PostFormValue("data")
 
 	if string(newBody) != string(b) {
 		t.Error("Badly handled a JSON containing an unknown event format")
 	}
 
 	b = []byte(`{}`)
-	req, err = http.NewRequest("POST", "https://analytics.packetfence.org/track/?verbose=1&ip=0&_=1665604206698", bytes.NewBuffer(b))
+	req, err = http.NewRequest("POST", "https://analytics.packetfence.org/track/?verbose=1&ip=0&_=1665604206698", strings.NewReader(url.Values{"data": []string{string(b)}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	sharedutils.CheckError(err)
 
 	err = p.MassageRequestBody(req)
 	sharedutils.CheckError(err)
 
-	newBody, err = ioutil.ReadAll(req.Body)
-	sharedutils.CheckError(err)
+	req.PostForm = nil
+	req.ParseForm()
+	newBody = req.PostFormValue("data")
 
 	if string(newBody) != string(b) {
 		t.Error("Badly handled a JSON containing an unknown event format")
 	}
 
 	b = []byte(`notjson`)
-	req, err = http.NewRequest("POST", "https://analytics.packetfence.org/track/?verbose=1&ip=0&_=1665604206698", bytes.NewBuffer(b))
+	req, err = http.NewRequest("POST", "https://analytics.packetfence.org/track/?verbose=1&ip=0&_=1665604206698", strings.NewReader(url.Values{"data": []string{string(b)}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	sharedutils.CheckError(err)
 
 	err = p.MassageRequestBody(req)
 	sharedutils.CheckError(err)
 
-	newBody, err = ioutil.ReadAll(req.Body)
-	sharedutils.CheckError(err)
+	req.PostForm = nil
+	req.ParseForm()
+	newBody = req.PostFormValue("data")
 
 	if string(newBody) != string(b) {
 		t.Error("Badly handled a payload that wasn't JSON")
+	}
+
+	b = []byte(`notjson`)
+	req, err = http.NewRequest("POST", "https://analytics.packetfence.org/track/?verbose=1&ip=0&_=1665604206698", bytes.NewBuffer(b))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	sharedutils.CheckError(err)
+
+	err = p.MassageRequestBody(req)
+	if err == nil {
+		t.Error("Didn't get an error massaging the body while there should have been one")
 	}
 }

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
@@ -42,32 +45,53 @@ func (m *MixpanelProxy) Provision(ctx caddy.Context) error {
 
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (m MixpanelProxy) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
-	m.MassageRequestBody(r)
+	err := m.MassageRequestBody(r)
 
-	return next.ServeHTTP(w, r)
+	if err == nil {
+		return next.ServeHTTP(w, r)
+	} else {
+		fmt.Println("Error while massaging the request body", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return nil
+	}
 }
 
 func (m MixpanelProxy) MassageRequestBody(r *http.Request) error {
 	defer r.Body.Close()
 
-	data, err := ioutil.ReadAll(r.Body)
+	bodyRaw, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return fmt.Errorf("mixpanel_proxy: Unable to read body: %s", err)
 	}
 
-	data, err = sjson.SetBytes(data, "#.properties.token", m.MixpanelKey)
+	query, err := url.ParseQuery(string(bodyRaw))
+	if err != nil {
+		return fmt.Errorf("mixpanel_proxy: Unable to parse body: %s", err)
+	}
+
+	data := query.Get("data")
+	if data == "" {
+		return fmt.Errorf("mixpanel_proxy: Unable to read 'data' in body")
+	}
+
+	data, err = sjson.Set(data, "#.properties.token", m.MixpanelKey)
 	if err != nil {
 		return fmt.Errorf("mixpanel_proxy: Unable to set token value: %s", err)
 	}
 
-	for _, toClear := range keysToClear {
-		data, err = sjson.SetBytes(data, "#.properties."+toClear, clearedValue)
-		if err != nil {
-			return fmt.Errorf("mixpanel_proxy: Unable to set clear %s key: %s", toClear, err)
-		}
-	}
+	//for _, toClear := range keysToClear {
+	//	data, err = sjson.Set(data, "#.properties."+toClear, clearedValue)
+	//	if err != nil {
+	//		return fmt.Errorf("mixpanel_proxy: Unable to set clear %s key: %s", toClear, err)
+	//	}
+	//}
 
-	r.Body = ioutil.NopCloser(bytes.NewBuffer(data))
+	newBody := "data=" + url.QueryEscape(data)
+	newBody = strings.Replace(newBody, "+", "%20", -1)
+	fmt.Println(string(bodyRaw))
+	fmt.Println(string(newBody))
+	r.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(newBody)))
+	r.Header.Set("Content-Length", strconv.Itoa(len(newBody)))
 
 	return nil
 }
